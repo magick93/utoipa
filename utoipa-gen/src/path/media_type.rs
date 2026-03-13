@@ -325,11 +325,12 @@ impl ToTokensDiagnostics for DefaultSchema<'_> {
 
 impl<'a> MediaTypePathExt<'a> for TypeTree<'a> {
     fn get_component_schema(&self) -> Result<Option<ComponentSchema>, Diagnostics> {
-        let generics = &if matches!(self.value_type, ValueType::Tuple) {
-            Generics::default()
-        } else {
-            self.get_path_generics()?
-        };
+        // Use empty generics for path-level schema collection. The type arguments
+        // of containers like Vec<T> are concrete types (not unresolved generic params),
+        // so they should not be treated as generic type parameters. Using get_path_generics()
+        // here would cause concrete types like type aliases (e.g. PersonNationalityResponse)
+        // to be misidentified as generic params, breaking schema naming.
+        let generics = &Generics::default();
 
         let component_schema = ComponentSchema::new(ComponentSchemaProps {
             container: &Container { generics },
