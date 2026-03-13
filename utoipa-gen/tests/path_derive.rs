@@ -1985,3 +1985,109 @@ fn derive_lifetime_generic_request_body_compiles() {
     let _ = serde_json::to_value(__path_test_const_generic::operation())
         .expect("Operation is JSON serializable");
 }
+
+#[test]
+fn derive_path_with_generic_flatten_inline_response() {
+    #![allow(dead_code)]
+
+    /// Test for https://github.com/magick93/utoipa/issues/1
+    /// Generics not producing correct openapi types when using
+    /// a generic wrapper struct with `#[serde(flatten)]` and `#[schema(inline = true)]`
+    /// on a generic type parameter, especially via a type alias.
+
+    #[derive(Serialize, ToSchema)]
+    struct CreatePersonNationalityRequest {
+        country_code: String,
+        is_primary: Option<bool>,
+        valid_from: Option<String>,
+        valid_to: Option<String>,
+    }
+
+    #[derive(Serialize, ToSchema)]
+    struct WithId<T> {
+        id: String,
+        #[serde(flatten)]
+        #[schema(inline = true)]
+        inner: T,
+        created_at: String,
+        updated_at: String,
+    }
+
+    type PersonNationalityResponse = WithId<CreatePersonNationalityRequest>;
+
+    #[utoipa::path(
+        get,
+        path = "/api/person/{person_id}/nationalities",
+        responses(
+            (status = 200, body = Vec<PersonNationalityResponse>),
+        ),
+    )]
+    async fn get_nationalities() {}
+
+    #[derive(OpenApi)]
+    #[openapi(paths(get_nationalities))]
+    struct ApiDoc;
+
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+
+    let schemas = doc
+        .pointer("/components/schemas")
+        .expect("OpenApi must have schemas");
+
+    // The schema should include all fields: the wrapper fields (id, created_at, updated_at)
+    // AND the flattened inner type fields (country_code, is_primary, valid_from, valid_to)
+    let with_id_schema = schemas
+        .as_object()
+        .unwrap()
+        .iter()
+        .find(|(key, _)| key.starts_with("WithId"))
+        .map(|(_, v)| v)
+        .expect("Should have a WithId schema");
+
+    let all_of = with_id_schema
+        .pointer("/allOf")
+        .expect("WithId schema should be an allOf");
+    let all_of_items = all_of.as_array().unwrap();
+
+    // Collect all property names from all allOf items
+    let mut all_properties: Vec<String> = Vec::new();
+    for item in all_of_items {
+        if let Some(props) = item.pointer("/properties") {
+            for (key, _) in props.as_object().unwrap() {
+                all_properties.push(key.clone());
+            }
+        }
+    }
+    all_properties.sort();
+
+    // All wrapper fields must be present
+    assert!(
+        all_properties.contains(&"id".to_string()),
+        "Schema must contain 'id' field from WithId wrapper. Found properties: {:?}",
+        all_properties
+    );
+    assert!(
+        all_properties.contains(&"created_at".to_string()),
+        "Schema must contain 'created_at' field from WithId wrapper. Found properties: {:?}",
+        all_properties
+    );
+    assert!(
+        all_properties.contains(&"updated_at".to_string()),
+        "Schema must contain 'updated_at' field from WithId wrapper. Found properties: {:?}",
+        all_properties
+    );
+
+    // All inner type fields must be present (flattened)
+    assert!(
+        all_properties.contains(&"country_code".to_string()),
+        "Schema must contain 'country_code' field from flattened inner type. Found properties: {:?}",
+        all_properties
+    );
+    assert!(
+        all_properties.contains(&"is_primary".to_string()),
+        "Schema must contain 'is_primary' field from flattened inner type. Found properties: {:?}",
+        all_properties
+    );
+
+    assert_json_snapshot!(&schemas);
+}

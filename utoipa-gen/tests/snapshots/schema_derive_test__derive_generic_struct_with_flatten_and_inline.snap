@@ -1,0 +1,44 @@
+---
+source: utoipa-gen/tests/schema_derive_test.rs
+expression: value
+---
+{
+  "allOf": [
+    {
+      "properties": {
+        "country_code": {
+          "type": "string"
+        },
+        "is_primary": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "country_code"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "created_at": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    }
+  ]
+}
