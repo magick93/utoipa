@@ -1,0 +1,59 @@
+---
+source: utoipa-gen/tests/path_derive.rs
+expression: "&schemas"
+---
+{
+  "WithId": {
+    "allOf": [
+      {
+        "description": "Test for https://github.com/magick93/utoipa/issues/1\nGenerics not producing correct openapi types when using\na generic wrapper struct with `#[serde(flatten)]` and `#[schema(inline = true)]`\non a generic type parameter, especially via a type alias.",
+        "properties": {
+          "country_code": {
+            "type": "string"
+          },
+          "is_primary": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "valid_from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "valid_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "country_code"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      }
+    ]
+  }
+}
