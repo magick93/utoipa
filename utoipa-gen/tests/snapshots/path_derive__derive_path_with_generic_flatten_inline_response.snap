@@ -3,10 +3,9 @@ source: utoipa-gen/tests/path_derive.rs
 expression: "&schemas"
 ---
 {
-  "WithId": {
+  "PersonNationalityResponse": {
     "allOf": [
       {
-        "description": "Test for https://github.com/magick93/utoipa/issues/1\nGenerics not producing correct openapi types when using\na generic wrapper struct with `#[serde(flatten)]` and `#[schema(inline = true)]`\non a generic type parameter, especially via a type alias.",
         "properties": {
           "country_code": {
             "type": "string"

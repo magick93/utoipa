@@ -1990,10 +1990,10 @@ fn derive_lifetime_generic_request_body_compiles() {
 fn derive_path_with_generic_flatten_inline_response() {
     #![allow(dead_code)]
 
-    /// Test for https://github.com/magick93/utoipa/issues/1
-    /// Generics not producing correct openapi types when using
-    /// a generic wrapper struct with `#[serde(flatten)]` and `#[schema(inline = true)]`
-    /// on a generic type parameter, especially via a type alias.
+    // Test for https://github.com/magick93/utoipa/issues/1
+    // Generics not producing correct openapi types when using
+    // a generic wrapper struct with `#[serde(flatten)]` and `#[schema(inline = true)]`
+    // on a generic type parameter, especially via a type alias.
 
     #[derive(Serialize, ToSchema)]
     struct CreatePersonNationalityRequest {
@@ -2034,33 +2034,37 @@ fn derive_path_with_generic_flatten_inline_response() {
         .pointer("/components/schemas")
         .expect("OpenApi must have schemas");
 
-    // The schema should include all fields: the wrapper fields (id, created_at, updated_at)
-    // AND the flattened inner type fields (country_code, is_primary, valid_from, valid_to)
-    let with_id_schema = schemas
-        .as_object()
-        .unwrap()
-        .iter()
-        .find(|(key, _)| key.starts_with("WithId"))
-        .map(|(_, v)| v)
-        .expect("Should have a WithId schema");
+    // The schema should be named "PersonNationalityResponse" (the type alias name),
+    // NOT "WithId" (the generic struct name). The type alias should be respected.
+    let schema_obj = schemas.as_object().unwrap();
+    assert!(
+        schema_obj.contains_key("PersonNationalityResponse"),
+        "Schema should be named 'PersonNationalityResponse' (the type alias), not 'WithId'. Found schemas: {:?}",
+        schema_obj.keys().collect::<Vec<_>>()
+    );
 
-    let all_of = with_id_schema
-        .pointer("/allOf")
-        .expect("WithId schema should be an allOf");
-    let all_of_items = all_of.as_array().unwrap();
+    let response_schema = schema_obj
+        .get("PersonNationalityResponse")
+        .unwrap();
 
-    // Collect all property names from all allOf items
+    // Collect all property names across allOf items (or direct properties)
     let mut all_properties: Vec<String> = Vec::new();
-    for item in all_of_items {
-        if let Some(props) = item.pointer("/properties") {
-            for (key, _) in props.as_object().unwrap() {
-                all_properties.push(key.clone());
+    if let Some(all_of) = response_schema.pointer("/allOf") {
+        for item in all_of.as_array().unwrap() {
+            if let Some(props) = item.pointer("/properties") {
+                for (key, _) in props.as_object().unwrap() {
+                    all_properties.push(key.clone());
+                }
             }
+        }
+    } else if let Some(props) = response_schema.pointer("/properties") {
+        for (key, _) in props.as_object().unwrap() {
+            all_properties.push(key.clone());
         }
     }
     all_properties.sort();
 
-    // All wrapper fields must be present
+    // All wrapper fields (from WithId<T>) must be present
     assert!(
         all_properties.contains(&"id".to_string()),
         "Schema must contain 'id' field from WithId wrapper. Found properties: {:?}",
@@ -2077,7 +2081,7 @@ fn derive_path_with_generic_flatten_inline_response() {
         all_properties
     );
 
-    // All inner type fields must be present (flattened)
+    // All inner type fields (from CreatePersonNationalityRequest) must be present via flatten
     assert!(
         all_properties.contains(&"country_code".to_string()),
         "Schema must contain 'country_code' field from flattened inner type. Found properties: {:?}",
@@ -2089,5 +2093,13 @@ fn derive_path_with_generic_flatten_inline_response() {
         all_properties
     );
 
-    assert_json_snapshot!(&schemas);
+    // The response body should reference "PersonNationalityResponse", not "WithId"
+    let response_ref = doc
+        .pointer("/paths/~1api~1person~1{person_id}~1nationalities/get/responses/200/content/application~1json/schema/items/$ref")
+        .expect("Response schema $ref must exist");
+    assert_eq!(
+        response_ref.as_str().unwrap(),
+        "#/components/schemas/PersonNationalityResponse",
+        "Response $ref should use the type alias name"
+    );
 }
