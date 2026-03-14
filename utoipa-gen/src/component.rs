@@ -1229,10 +1229,59 @@ impl ComponentSchema {
                             container.generics,
                         )?;
                         name_tokens.extend(quote! { std::borrow::Cow::Owned(format!("{}_{}", < #rewritten_path as utoipa::ToSchema >::name(), #children_name)) });
-                    } else {
+                    } else if container.generics.get_generic_type_param_index(type_tree).is_some() {
+                        // This is a generic type parameter (e.g. `T`) - must use runtime
+                        // name resolution since the actual type is not known at macro expansion.
                         name_tokens.extend(
                             quote! { format!("{}", < #rewritten_path as utoipa::ToSchema >::name()) },
                         );
+                    } else {
+                        let literal_name = rewritten_path
+                            .segments
+                            .last()
+                            .expect("rewritten path must have at least one segment")
+                            .ident
+                            .to_string();
+
+                        // For `Self` references, always use the runtime-resolved name
+                        // since `Self` is a keyword, not a type alias.
+                        if literal_name == "Self" {
+                            name_tokens.extend(
+                                quote! { format!("{}", < #rewritten_path as utoipa::ToSchema >::name()) },
+                            );
+                        } else {
+                            // For non-generic types, check at runtime whether ToSchema::name()
+                            // has been customized (e.g. via #[schema(as = ...)]). If so, respect
+                            // the custom name. Otherwise, use the literal identifier from the
+                            // source code to preserve type alias names.
+                            //
+                            // This handles the case where a type alias like
+                            // `type PersonNationalityResponse = WithId<CreatePersonNationalityRequest>`
+                            // is used as a response body - without this, the schema would be named
+                            // "WithId" (the underlying type) instead of "PersonNationalityResponse"
+                            // (the alias) because Rust type aliases are transparent at runtime.
+                            name_tokens.extend(
+                                quote! {
+                                    {
+                                        let custom_name = < #rewritten_path as utoipa::ToSchema >::name();
+                                        let full_type_name = std::any::type_name::<#rewritten_path>();
+                                        let without_generic = full_type_name
+                                            .split_once("<")
+                                            .map(|(s, _)| s)
+                                            .unwrap_or(full_type_name);
+                                        let default_name = without_generic
+                                            .rsplit_once("::")
+                                            .map(|(_, n)| n)
+                                            .unwrap_or(without_generic);
+                                        if custom_name.as_ref() != default_name {
+                                            format!("{}", custom_name)
+                                        } else {
+                                            format!("{}", #literal_name)
+                                        }
+                                    }
+                                },
+                            );
+                        }
                     }
 
                     object_schema_reference.name = quote! { String::from(#name_tokens) };
