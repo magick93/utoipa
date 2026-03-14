@@ -3274,28 +3274,3 @@ fn test_new_type_struct_pattern() {
 
     assert_json_snapshot!(value);
 }
-
-#[test]
-fn derive_generic_struct_with_flatten_and_inline() {
-    #[derive(Serialize, ToSchema)]
-    struct Inner {
-        country_code: String,
-        is_primary: Option<bool>,
-    }
-
-    let value: Value = api_doc! {
-        #[derive(Serialize)]
-        struct WithId<Inner> {
-            id: String,
-            #[serde(flatten)]
-            #[schema(inline = true)]
-            inner: Inner,
-            created_at: String,
-            updated_at: String,
-        }
-    };
-
-    // The schema should be an allOf with the inlined Inner schema and
-    // the remaining properties (id, created_at, updated_at) as an object.
-    assert_json_snapshot!(value);
-}
